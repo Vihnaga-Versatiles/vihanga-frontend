@@ -44,6 +44,7 @@ import { getThemeColors } from "utilities/getThemeColors";
 import { Toast } from "service/toast";
 import axios from "axios";
 import { appURL } from "utilities";
+import { downloadBackendExport } from "utilities/backendExport";
 import { exportToCSV, exportToExcel, exportToPDF } from "utilities/ExportFunctions";
 import moment from "moment";
 import CustomMap from "pages/vihanga/components/MapView/CustomMap";
@@ -854,90 +855,84 @@ const companyId = getItemFromLocalStorage("companyId");
 
   const handleExport = async (item) => {
     try {
+      const selectedTabType = getSelectedTabType();
+      const isManagerView = selectedTabType === "myteam" || selectedTabType === "mycompany";
+
       const params = {
-        companyId: companyId,
+        companyId,
         userId: currentUserId,
-        currentUserId: currentUserId,
-        type: getSelectedTabType(),
+        currentUserId,
+        type: selectedTabType,
       };
 
-      // Add date range filtering if dates are provided
       if (startDate && endDate) {
         params.from = startDate;
         params.to = endDate;
       }
 
-      const response = await axios.get(
-        `${appURL}/recruitment/time-tracking`,
-        {
-          responseType: "json",
-          params: params,
-        }
-      );
+      if (isManagerView) {
+        params.excludeSelf = "true";
+      }
+
+      if (item.format === "csv" || item.format === "excel") {
+        await downloadBackendExport({
+          module: "time-entries",
+          params,
+          format: item.format,
+          filename: `time-entries-export-${new Date().toISOString().split("T")[0]}`,
+        });
+        Toast({ message: `Exported as ${item.format.toUpperCase()}`, type: "success" });
+        return;
+      }
+
+      const response = await axios.get(`${appURL}/recruitment/time-tracking`, {
+        responseType: "json",
+        params,
+      });
 
       if (response?.data?.success) {
-        // Extract the leave types array from nested response
-        const rawData = response.data.data.data;
-        console.log("raw data for export", rawData)
-        
-        // Group entries by user and date to combine multiple clock-in/out entries
-        const groupedData = groupEntriesByUserAndDate(rawData);
-        console.log("grouped data for export", groupedData)
-        
-        // Format grouped data for export
-        const formattedData = groupedData.map((entry) => {
-          return {
-            EmployeeName: entry.employeeInfo?.name || "",
-            EmployeeMail: entry?.employeeInfo?.email || "",
-            Day: (() => {
-              const d = new Date(entry.dateString || "");
-              return !isNaN(d)
-                ? d.toLocaleString('default', { weekday: 'short' }) // Mon, Tue, Wed...
-                : "";
-            })(),
-            Date: (() => {
-              const d = new Date(entry.dateString || "");
-              return !isNaN(d)
-                ? `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}`
-                : "";
-            })(),
-            TimeIn: entry.timeIn || "",
-            TimeOut: entry.timeOut || "",
-            Hours: entry.hours || "-",
-            Method: entry.method?.charAt(0).toUpperCase() + entry.method?.slice(1).toLowerCase() || "",
-            DistanceTravelled: entry.distanceTraveled?.distanceInKm || "-",
-            location: entry?.employeeInfo?.location || "",
-            ClockInCoordinates: entry.distanceTraveled?.clockInCoordinates?.latitude && entry.distanceTraveled?.clockInCoordinates?.longitude 
-              ? `${entry.distanceTraveled.clockInCoordinates.latitude}, ${entry.distanceTraveled.clockInCoordinates.longitude}` 
-              : "-",
-            ClockOutCoordinates: entry.distanceTraveled?.clockOutCoordinates?.latitude && entry.distanceTraveled?.clockOutCoordinates?.longitude 
-              ? `${entry.distanceTraveled.clockOutCoordinates.latitude}, ${entry.distanceTraveled.clockOutCoordinates.longitude}` 
-              : "-",
-            Remarks: entry?.Remarks || entry.employeeInfo?.Remarks || "",
-            Status: entry.status?.charAt(0).toUpperCase() + entry.status?.slice(1).toLowerCase() || "",
-          };
-        });
-
-        // Export according to selected format
-        switch (item.format) {
-          case "csv":
-            exportToCSV(formattedData);
-            break;
-          case "excel":
-            exportToExcel(formattedData);
-            break;
-          case "pdf":
-            exportToPDF(formattedData);
-            break;
-          default:
-            alert(`Unknown export format: ${item.format}`);
-            return;
+        let rawData = response.data.data.data || [];
+        if (isManagerView && currentUserId) {
+          rawData = rawData.filter((entry) => entry.userId !== currentUserId);
         }
 
-        Toast({
-          message: `Exported as ${item.format.toUpperCase()}`,
-          type: "success",
-        });
+        const groupedData = groupEntriesByUserAndDate(rawData);
+
+        const formattedData = groupedData.map((entry) => ({
+          EmployeeName: entry.employeeInfo?.name || "",
+          EmployeeMail: entry?.employeeInfo?.email || "",
+          Day: (() => {
+            const d = new Date(entry.dateString || "");
+            return !isNaN(d) ? d.toLocaleString("default", { weekday: "short" }) : "";
+          })(),
+          Date: (() => {
+            const d = new Date(entry.dateString || "");
+            return !isNaN(d)
+              ? `${d.getDate()} ${d.toLocaleString("default", { month: "short" })} ${d.getFullYear()}`
+              : "";
+          })(),
+          TimeIn: entry.timeIn || "",
+          TimeOut: entry.timeOut || "",
+          Hours: entry.hours || "-",
+          Method: entry.method?.charAt(0).toUpperCase() + entry.method?.slice(1).toLowerCase() || "",
+          DistanceTravelled: entry.distanceTraveled?.distanceInKm || "-",
+          location: entry?.employeeInfo?.location || "",
+          ClockInCoordinates:
+            entry.distanceTraveled?.clockInCoordinates?.latitude &&
+            entry.distanceTraveled?.clockInCoordinates?.longitude
+              ? `${entry.distanceTraveled.clockInCoordinates.latitude}, ${entry.distanceTraveled.clockInCoordinates.longitude}`
+              : "-",
+          ClockOutCoordinates:
+            entry.distanceTraveled?.clockOutCoordinates?.latitude &&
+            entry.distanceTraveled?.clockOutCoordinates?.longitude
+              ? `${entry.distanceTraveled.clockOutCoordinates.latitude}, ${entry.distanceTraveled.clockOutCoordinates.longitude}`
+              : "-",
+          Remarks: entry?.Remarks || entry.employeeInfo?.Remarks || "",
+          Status: entry.status?.charAt(0).toUpperCase() + entry.status?.slice(1).toLowerCase() || "",
+        }));
+
+        exportToPDF(formattedData);
+        Toast({ message: `Exported as ${item.format.toUpperCase()}`, type: "success" });
       } else {
         alert("Failed to fetch export data.");
       }

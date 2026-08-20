@@ -20,6 +20,7 @@ import ErrorIcon from "@mui/icons-material/Error";
 import DateFilterButton from "pages/vihanga/pages/board/components/Date";
 import FilePreview from "pages/vihanga/pages/employeePortal/TimeTracking/AttendanceUpload/FilePreview";
 import { canEdit, canDelete } from "utilities/privilegeHelper";
+import { downloadBackendExport, buildLeaveExportParams } from "utilities/backendExport";
 
 const UploadLeaves = () => {
   const { t } = useTranslation();
@@ -43,6 +44,8 @@ const UploadLeaves = () => {
   const [recordsLoading, setRecordsLoading] = useState(false);
 
   const companyId = getItemFromLocalStorage("companyId");
+  const currentUser = getItemFromLocalStorage("user");
+  const currentUserId = currentUser?._id;
 
   const fetchUploads = async () => {
     try {
@@ -367,127 +370,40 @@ const UploadLeaves = () => {
   };
 
   const handleExport = async (exportStartDate = null, exportEndDate = null) => {
-  setExporting(true);
-  try {
-    console.log("Starting export process...");
-
-    // Build API URL with optional date parameters
-    let apiUrl = `${appURL}/recruitment/leaves/by-company?companyId=${companyId}`;
-    if (exportStartDate && exportEndDate) {
-      apiUrl += `&startDate=${exportStartDate}&endDate=${exportEndDate}`;
-    }
-
-    // Call API to get employees' leave records
-    const balancesResponse = await axios.get(apiUrl);
-
-    
-
-    const employeeBalances = balancesResponse.data.data.data || [];
-
-    console.log("Found employee balances:", employeeBalances.length);
-
-    if (employeeBalances.length === 0) {
-      Toast({
-        message: "No leave records found for this company.",
-        type: "warning",
+    setExporting(true);
+    try {
+      const exportParams = buildLeaveExportParams({
+        companyId,
+        currentUserId,
+        type: getSelectedTabType() || "mycompany",
+        viewMode: "admin",
+        viewType: "all-leaves",
+        startDate: exportStartDate || undefined,
+        endDate: exportEndDate || undefined,
+        userRole: currentUser?.employmentInformation?.role,
       });
-      return;
+
+      await downloadBackendExport({
+        module: "leaves",
+        params: exportParams,
+        format: "excel",
+        filename: `leave-records-export-${new Date().toISOString().split("T")[0]}`,
+      });
+
+      Toast({
+        message: "Leave records exported successfully.",
+        type: "success",
+      });
+    } catch (err) {
+      console.error("Export error:", err);
+      Toast({
+        message: err.response?.data?.message || "Failed to export leave records. Please try again.",
+        type: "error",
+      });
+    } finally {
+      setExporting(false);
     }
-
-   const exportData = [];
-   
-   employeeBalances.forEach((employee) => {
-     if (employee?.leaveRecords && employee.leaveRecords.length > 0) {
-       // Create a separate row for each leave record
-       employee.leaveRecords.forEach((record) => {
-         // Get approver names for pending leaves
-         const pendingWith = record?.status === "pending" && record?.currentApprovers && record.currentApprovers.length > 0
-           ? record.currentApprovers.map(approver => approver.approverName || approver.approverId).join(', ')
-           : "N/A";
-
-         const row = {
-           "Employee ID": employee?.empId || "N/A",
-           "Employee Name": employee?.employeeName || "N/A",
-           "Legal Entity": employee?.legalEntity || "N/A",
-           "Department": employee?.department || "N/A",
-           "Designation": employee?.designation || "N/A",
-           "Leave Type": record?.leaveType || "N/A",
-           "Leave From Date": record?.leaveFromDate
-             ? new Date(record.leaveFromDate).toLocaleDateString()
-             : "N/A",
-           "Leave To Date": record?.leaveToDate
-             ? new Date(record.leaveToDate).toLocaleDateString()
-             : "N/A",
-             "Duration": record?.duration || "N/A",
-            "Status": record?.status || "N/A",
-            "Pending With": pendingWith
-         };
-         exportData.push(row);
-       });
-     } else {
-       // If no leave records, still create a row with employee info
-       const row = {
-         "Employee ID": employee?.empId || "N/A",
-         "Employee Name": employee?.employeeName || "N/A",
-         "Legal Entity": employee?.legalEntity || "N/A",
-         "Department": employee?.department || "N/A",
-         "Designation": employee?.designation || "N/A",
-         "Leave Type": "No Leave Records",
-         "Leave From Date": "N/A",
-         "Leave To Date": "N/A",
-         "Duration": "N/A",
-         "Status": "N/A",
-         "Pending With": "N/A"
-       };
-       exportData.push(row);
-     }
-   });
-
-
-    console.log("Export data prepared:", exportData);
-
-    // Create workbook and worksheet
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(exportData);
-
-    // Set column widths
-    ws["!cols"] = [
-      { wch: 20 }, // Employee ID
-      { wch: 25 }, // Employee Name
-      { wch: 30 }, // Legal Entity
-      { wch: 20 }, // Department
-      { wch: 25 }, // Designation
-      { wch: 20 }, // Leave Type
-      { wch: 18 }, // Leave From Date
-      { wch: 18 }, // Leave To Date
-      { wch: 12 }, // Duration
-      { wch: 15 }, // Status
-      { wch: 30 }, // Pending With
-    ];
-
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, "Leave Records Export");
-
-    // Generate and download file
-    const fileName = `leave-records-export-${new Date()
-      .toISOString()
-      .split("T")[0]}.xlsx`;
-    XLSX.writeFile(wb, fileName);
-
-    Toast({
-      message: `Leave records exported successfully. ${exportData.length} records exported.`,
-      type: "success",
-    });
-  } catch (err) {
-    console.error("Export error:", err);
-    Toast({
-      message: "Failed to export leave records. Please try again.",
-      type: "error",
-    });
-  } finally {
-    setExporting(false);
-  }
-};
+  };
 
 
   // Handler for date range selection from Date component

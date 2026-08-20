@@ -44,7 +44,11 @@ import ArrowDownwardOutlinedIcon from "../../../../../../assets/svg/export.svg";
 import MobileLeaveCard from "../../../../components/MobileLeaveCard/MobileLeaveCard";
 import { useTranslation } from "react-i18next";
 import { canEdit, canDelete } from "utilities/privilegeHelper";
-import * as XLSX from "xlsx";
+import {
+  downloadBackendExport,
+  buildLeaveExportParams,
+} from "utilities/backendExport";
+import { exportToPDF } from "utilities/ExportFunctions";
 
 const formatLocalYMD = (date) => {
   const y = date.getFullYear();
@@ -618,117 +622,93 @@ const companyId = getItemFromLocalStorage("companyId");
     { text: t("Export as PDF"),format: "pdf", icon: ArrowDownwardOutlinedIcon },
   ];
 
-  // Export with date filtering
-  const handleExportWithDateFilter = async (exportStartDate = null, exportEndDate = null) => {
+  const buildExportParams = (exportStartDate, exportEndDate) => {
+    let actualStartDate = exportStartDate;
+    let actualEndDate = exportEndDate;
+
+    if (!actualStartDate || !actualEndDate) {
+      if (startDate && endDate) {
+        actualStartDate = startDate;
+        actualEndDate = endDate;
+      } else {
+        const range = getDefault30DayRange();
+        actualStartDate = range.startDate;
+        actualEndDate = range.endDate;
+      }
+    }
+
+    const userRole = userRoleId?.employmentInformation?.role;
+    return buildLeaveExportParams({
+      companyId,
+      currentUserId,
+      type: getSelectedTabType(),
+      search,
+      startDate: actualStartDate,
+      endDate: actualEndDate,
+      status: leaveStatusFilter,
+      viewMode,
+      userRole,
+    });
+  };
+
+  const fetchLeavesForPdfExport = async (exportParams) => {
+    const response = await axios.get(`${appURL}/recruitment/leaves`, {
+      params: { ...exportParams, page: 1, limit: 50000 },
+    });
+    return response.data?.data?.data || [];
+  };
+
+  const mapLeavesToExportRows = (leaves) =>
+    leaves.map((leave) => ({
+      "Employee ID": leave.employeeInfo?.employeeNumber || leave.empId || "N/A",
+      "Employee Name": leave.employeeInfo?.name || "N/A",
+      "Department": leave.employeeInfo?.department || "N/A",
+      "Leave Type": leave.absenceType || "N/A",
+      "Leave From Date": leave.from ? new Date(leave.from).toLocaleDateString() : "N/A",
+      "Leave To Date": leave.to ? new Date(leave.to).toLocaleDateString() : "N/A",
+      Duration: leave.durationOfAbsence || "N/A",
+      Status: leave.status || "N/A",
+      "Pending With":
+        leave.status === "pending" && leave.currentApprovers?.length
+          ? leave.currentApprovers.map((a) => a.approverName || a.approverId).join(", ")
+          : "N/A",
+    }));
+
+  // Export with same filters as the table view
+  const handleExportWithDateFilter = async (exportStartDate = null, exportEndDate = null, format = "excel") => {
     setExporting(true);
     try {
-      console.log("Starting export process...");
+      const exportParams = buildExportParams(exportStartDate, exportEndDate);
 
-      // Use provided dates, or current dates, or fallback to default 30-day range
-      let actualStartDate = exportStartDate;
-      let actualEndDate = exportEndDate;
-      
-      if (!actualStartDate || !actualEndDate) {
-        if (startDate && endDate) {
-          actualStartDate = startDate;
-          actualEndDate = endDate;
-        } else {
-          const range = getDefault30DayRange();
-          actualStartDate = range.startDate;
-          actualEndDate = range.endDate;
+      if (format === "pdf") {
+        const leaves = await fetchLeavesForPdfExport(exportParams);
+        if (!leaves.length) {
+          Toast({ message: "No leave records found for the selected filters.", type: "warning" });
+          return;
         }
-      }
-
-      // Build API URL with date parameters
-      let apiUrl = `${appURL}/recruitment/leaves/by-company?companyId=${companyId}`;
-      apiUrl += `&startDate=${actualStartDate}&endDate=${actualEndDate}`;
-
-      // Call API to get employees' leave records
-      const balancesResponse = await axios.get(apiUrl);
-
-      const employeeBalances = balancesResponse.data.data.data || [];
-
-      console.log("Found employee balances:", employeeBalances.length);
-
-      if (employeeBalances.length === 0) {
+        exportToPDF(mapLeavesToExportRows(leaves));
         Toast({
-          message: "No leave records found for this company.",
-          type: "warning",
+          message: `Leave records exported successfully. ${leaves.length} records exported.`,
+          type: "success",
         });
         return;
       }
 
-      const exportData = [];
-      
-      employeeBalances.forEach((employee) => {
-        if (employee?.leaveRecords && employee.leaveRecords.length > 0) {
-          // Create a separate row for each leave record
-          employee.leaveRecords.forEach((record) => {
-            // Get approver names for pending leaves
-            const pendingWith = record?.status === "pending" && record?.currentApprovers && record.currentApprovers.length > 0
-              ? record.currentApprovers.map(approver => approver.approverName || approver.approverId).join(', ')
-              : "N/A";
-
-            const row = {
-              "Employee ID": employee?.empId || "N/A",
-              "Employee Name": employee?.employeeName || "N/A",
-              "Legal Entity": employee?.legalEntity || "N/A",
-              "Department": employee?.department || "N/A",
-              "Designation": employee?.designation || "N/A",
-              "Leave Type": record?.leaveType || "N/A",
-              "Leave From Date": record?.leaveFromDate
-                ? new Date(record.leaveFromDate).toLocaleDateString()
-                : "N/A",
-              "Leave To Date": record?.leaveToDate
-                ? new Date(record.leaveToDate).toLocaleDateString()
-                : "N/A",
-              "Duration": record?.duration || "N/A",
-              "Status": record?.status || "N/A",
-              "Pending With": pendingWith
-            };
-            exportData.push(row);
-          });
-        }
+      await downloadBackendExport({
+        module: "leaves",
+        params: exportParams,
+        format,
+        filename: `leave-records-export-${new Date().toISOString().split("T")[0]}`,
       });
 
-      console.log("Export data prepared:", exportData);
-
-      // Create workbook and worksheet
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(exportData);
-
-      // Set column widths
-      ws["!cols"] = [
-        { wch: 15 }, // Employee ID
-        { wch: 25 }, // Employee Name
-        { wch: 20 }, // Legal Entity
-        { wch: 20 }, // Department
-        { wch: 25 }, // Designation
-        { wch: 20 }, // Leave Type
-        { wch: 18 }, // Leave From Date
-        { wch: 18 }, // Leave To Date
-        { wch: 12 }, // Duration
-        { wch: 15 }, // Status
-        { wch: 30 }, // Pending With
-      ];
-
-      // Add worksheet to workbook
-      XLSX.utils.book_append_sheet(wb, ws, "Leave Records Export");
-
-      // Generate and download file
-      const fileName = `leave-records-export-${new Date()
-        .toISOString()
-        .split("T")[0]}.xlsx`;
-      XLSX.writeFile(wb, fileName);
-
       Toast({
-        message: `Leave records exported successfully. ${exportData.length} records exported.`,
+        message: "Leave records exported successfully.",
         type: "success",
       });
     } catch (err) {
       console.error("Export error:", err);
       Toast({
-        message: "Failed to export leave records. Please try again.",
+        message: err.response?.data?.message || "Failed to export leave records. Please try again.",
         type: "error",
       });
     } finally {
@@ -737,8 +717,7 @@ const companyId = getItemFromLocalStorage("companyId");
   };
 
   const handleExport = async (item) => {
-    // Export uses current date filter (same as time tracking)
-    await handleExportWithDateFilter(startDate, endDate);
+    await handleExportWithDateFilter(startDate, endDate, item?.format || "excel");
   };
 
   return (

@@ -37,12 +37,13 @@ const CandidateDetailsForm = ({ id, setStatus }) => {
     const { t } = useTranslation();
   const generateCandidateId = () => {
     const now = new Date();
-    const h = now.getHours().toString().padStart(2, "0");
+    // Offset hour by 10 so the ID never starts with 0 (hours 0-23 → 10-33)
+    const h = (now.getHours() + 10).toString();
     const m = now.getMinutes().toString().padStart(2, "0");
     const s = now.getSeconds().toString().padStart(2, "0");
     const rand = Math.floor(Math.random() * 90 + 10); // random 2-digit
 
-    return `${h}${m}${s}${rand}`; // e.g., "10452276"
+    return `${h}${m}${s}${rand}`; // e.g., "19344743" instead of "09344743"
   };
   const companyId = localStorage.getItem("companyId") !== null
     ? JSON.parse(localStorage.getItem("companyId"))

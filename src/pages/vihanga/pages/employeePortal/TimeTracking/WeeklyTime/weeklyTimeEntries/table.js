@@ -47,6 +47,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { deleteTimeTrackingEntry } from "service/timeTrackingApi";
 import axios from "axios";
 import { appURL } from "utilities";
+import { downloadBackendExport } from "utilities/backendExport";
 import { exportToCSV, exportToExcel, exportToPDF } from "utilities/ExportFunctions";
 import { calculateHours as calculateHoursUtil, parseTime, groupEntriesByUserAndDate } from "../../utils/timeCalculations";
 
@@ -244,50 +245,59 @@ const WeeklyTimeEntries = ({
 
   const handleExport = async (item) => {
     try {
+      const tabType = getSelectedTabType();
+      const isManagerView = tabType === "myteam" || tabType === "mycompany";
+
       const params = {
-        companyId: companyId,
-        userId: userId,
+        companyId,
+        userId,
         currentUserId: userId,
-        type: getSelectedTabType(),
+        type: tabType,
       };
 
-      // Add date range filtering if dates are provided
       if (startDate && endDate) {
         params.from = startDate;
         params.to = endDate;
       }
 
-      const response = await axios.get(
-        `${appURL}/recruitment/time-tracking`,
-        {
-          responseType: "json",
-          params: params,
-        }
-      );
+      if (isManagerView) {
+        params.excludeSelf = "true";
+      }
+
+      if (item.format === "csv" || item.format === "excel") {
+        await downloadBackendExport({
+          module: "time-entries",
+          params,
+          format: item.format,
+          filename: `time-entries-export-${new Date().toISOString().split("T")[0]}`,
+        });
+        Toast({ message: `Exported as ${item.format.toUpperCase()}`, type: "success" });
+        return;
+      }
+
+      const response = await axios.get(`${appURL}/recruitment/time-tracking`, {
+        responseType: "json",
+        params,
+      });
 
       if (response?.data?.success) {
-        // Extract the leave types array from nested response
-        const rawData = response.data.data.data;
-        console.log("raw data for export", rawData);
-        
-        // Group entries by user and date to combine multiple clock-in/out entries
+        let rawData = response.data.data.data || [];
+        if (isManagerView && userId) {
+          rawData = rawData.filter((entry) => entry.userId !== userId);
+        }
+
         const groupedData = groupEntriesByUserAndDate(rawData);
-        console.log("grouped data for export", groupedData);
-        
-        // Format grouped data for export
         const formattedData = groupedData.map((entry) => ({
           EmployeeName: entry.employeeInfo?.name || "",
           EmployeeMail: entry?.employeeInfo?.email || "",
           Day: (() => {
             const d = new Date(entry.dateString || "");
-            return !isNaN(d)
-              ? d.toLocaleString('default', { weekday: 'short' }) // Mon, Tue, Wed...
-              : "";
+            return !isNaN(d) ? d.toLocaleString("default", { weekday: "short" }) : "";
           })(),
           Date: (() => {
             const d = new Date(entry.dateString || "");
             return !isNaN(d)
-              ? `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}`
+              ? `${d.getDate()} ${d.toLocaleString("default", { month: "short" })} ${d.getFullYear()}`
               : "";
           })(),
           TimeIn: entry.timeIn || "",
@@ -299,26 +309,8 @@ const WeeklyTimeEntries = ({
           Status: entry.status?.charAt(0).toUpperCase() + entry.status?.slice(1).toLowerCase() || "",
         }));
 
-        // Export according to selected format
-        switch (item.format) {
-          case "csv":
-            exportToCSV(formattedData);
-            break;
-          case "excel":
-            exportToExcel(formattedData);
-            break;
-          case "pdf":
-            exportToPDF(formattedData);
-            break;
-          default:
-            alert(`Unknown export format: ${item.format}`);
-            return;
-        }
-
-        Toast({
-          message: `Exported as ${item.format.toUpperCase()}`,
-          type: "success",
-        });
+        exportToPDF(formattedData);
+        Toast({ message: `Exported as ${item.format.toUpperCase()}`, type: "success" });
       } else {
         alert("Failed to fetch export data.");
       }

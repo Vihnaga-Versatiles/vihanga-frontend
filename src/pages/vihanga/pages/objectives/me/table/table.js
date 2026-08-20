@@ -39,6 +39,8 @@ import CustomTable from "pages/vihanga/components/CustomTable";
 import axios from "axios";
 import { getItemFromLocalStorage } from "utilities/getLocalStorageItem";
 import { getThemeColors } from "utilities/getThemeColors";
+import { downloadBackendExport } from "utilities/backendExport";
+import { exportToCSV, exportToExcel, exportToPDF } from "utilities/ExportFunctions";
 // import ToggleTabs from "pages/vihanga/components/commonSwichButtons";
 import HistoryIcon from "@mui/icons-material/History";
 import googleSheetsIcon from "../../../../../../assets/svg/googleSheets.svg";
@@ -888,21 +890,105 @@ const type=getItemFromLocalStorage("selectedTab")
 
   const filteredTasks = filterTasks(tasks);
 
+  const flattenTasksForExport = (items, level = 0) => {
+    let result = [];
+    items.forEach((item) => {
+      result.push({
+        Type: level === 0 ? "Task" : "Sub Task",
+        Title: item.title || item.task || "N/A",
+        Description: item.description || "N/A",
+        Progress: `${item.progress || 0}%`,
+        Status: item.status || "N/A",
+        Owner: item.owner || "N/A",
+        "Due Date": item.dueDate || "N/A",
+        Priority: item.priority || "N/A",
+      });
+      if (item.children?.length) {
+        result = result.concat(flattenTasksForExport(item.children, level + 1));
+      }
+    });
+    return result;
+  };
+
+  const fetchAllTasksForExport = async () => {
+    const response = await axios.get(`${appURL}/tasks2/getTasks/${userId}/${companyId}`, {
+      params: {
+        type: selectedSwitch || "me",
+        search: search || "",
+        exportAll: "true",
+      },
+    });
+    const rawTasks = response.data?.data || [];
+    const mapTask = (task) => ({
+      ...task,
+      id: task._id,
+      task: task.title,
+      progress: task.progressStatus || 0,
+      dueDate: task.dueDate ? task.dueDate.split("T")[0] : "No date",
+      owner: task.owner || "Unassigned",
+      startDate: task.startDate ? task.startDate.split("T")[0] : "",
+      status: task.status || "notstarted",
+      isAlignedToCompany: task.isAlignedToCompany || false,
+      children: Array.isArray(task.children) ? task.children.map(mapTask) : [],
+    });
+    return filterTasks(Array.isArray(rawTasks) ? rawTasks.map(mapTask) : []);
+  };
+
+  const handleTasksExport = async (format) => {
+    try {
+      if (format === "csv" || format === "excel") {
+        await downloadBackendExport({
+          module: "tasks",
+          pathSuffix: `/${userId}/${companyId}`,
+          params: {
+            type: selectedSwitch || "me",
+            search: search || "",
+          },
+          format,
+          filename: `tasks-export-${new Date().toISOString().split("T")[0]}`,
+        });
+        Toast({ message: `Exported as ${format.toUpperCase()}`, type: "success" });
+        return;
+      }
+
+      const allTasks = await fetchAllTasksForExport();
+      if (!allTasks.length) {
+        Toast({ message: t("Tasks.NoDataToExport"), type: "warning", time: 4000 });
+        return;
+      }
+      const exportData = flattenTasksForExport(allTasks);
+      if (format === "pdf") {
+        exportToPDF(exportData);
+      } else {
+        exportToCSV(exportData);
+      }
+      Toast({ message: `Exported as ${format.toUpperCase()}`, type: "success" });
+    } catch (err) {
+      console.error("Task export error:", err);
+      Toast({
+        message: err.response?.data?.message || "Failed to export tasks",
+        type: "error",
+      });
+    }
+  };
+
   // Navigate to AddTaskForm
   const handleNavigateToAddTask = () => {
     history.push(`/admin/objectives/task?fromTask=${true}`)
   };
 
-  const handleGoogleSheet = () => {
-    if (!filteredTasks || filteredTasks.length === 0) {
-      Toast({ message: t("Tasks.NoDataToExport"), type: "warning", time: 4000 });
-      return;
-    }
-    const dataForSheet = filteredTasks.map((item) => ({
-      ...item,
-      comments: Array.isArray(item.comments) ? item.comments : [],
-    }));
-    dispatch(exportSheet({ data: dataForSheet }))
+  const handleGoogleSheet = async () => {
+    try {
+      const allTasks = await fetchAllTasksForExport();
+      if (!allTasks?.length) {
+        Toast({ message: t("Tasks.NoDataToExport"), type: "warning", time: 4000 });
+        return;
+      }
+      const dataForSheet = allTasks.map((item) => ({
+        ...item,
+        comments: Array.isArray(item.comments) ? item.comments : [],
+      }));
+      dispatch(exportSheet({ data: dataForSheet }))
       .then((response) => {
         const sheetUrl = typeof response?.data === "string"
           ? response.data
@@ -912,6 +998,9 @@ const type=getItemFromLocalStorage("selectedTab")
         }
       })
       .catch(() => {});
+    } catch (err) {
+      Toast({ message: t("Tasks.NoDataToExport"), type: "error", time: 4000 });
+    }
   };
 
   // Handlers for edit, view, delete, and subtask
@@ -1890,6 +1979,7 @@ const type=getItemFromLocalStorage("selectedTab")
                 skipInternalFilter
                 indentOnlyFirstColumn
                 createTaskRef={createTaskRef}
+                onExport={handleTasksExport}
               />
             </Box>
           )}

@@ -44,7 +44,8 @@ const TableHeaderTasks = ({
   filteredData,
   handleCascade,
   handleCreateTask,
-  createTaskRef
+  createTaskRef,
+  onExport,
 }) => {
     const history = useHistory();
   const [exportAnchorEl, setExportAnchorEl] = useState(null);
@@ -92,7 +93,12 @@ const { i } = useTranslation()
   };
 
   const handleExport = (format) => {
-    // For tasks, selectedItems contains keys, so we need to get the actual data
+    if (onExport) {
+      onExport(format);
+      return;
+    }
+
+    // Fallback: client-side export from loaded rows
     let dataToExport;
     if (selectedItems && selectedItems.length > 0) {
       // If selectedItems contains keys (for tasks), filter the data

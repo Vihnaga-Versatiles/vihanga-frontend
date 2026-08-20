@@ -326,7 +326,7 @@ const CustomTable = ({
           filteredData={data}
           handleCreateTask={handleCreateTask}
           createTaskRef={createTaskRef}
-
+          onExport={onExport}
         />
       );
     }
