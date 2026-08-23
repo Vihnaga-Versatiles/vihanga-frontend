@@ -39,7 +39,7 @@ import CustomTable from "pages/vihanga/components/CustomTable";
 import axios from "axios";
 import { getItemFromLocalStorage } from "utilities/getLocalStorageItem";
 import { getThemeColors } from "utilities/getThemeColors";
-import { downloadBackendExport } from "utilities/backendExport";
+import { downloadBackendExport, normalizeExportId } from "utilities/backendExport";
 import { exportToCSV, exportToExcel, exportToPDF } from "utilities/ExportFunctions";
 // import ToggleTabs from "pages/vihanga/components/commonSwichButtons";
 import HistoryIcon from "@mui/icons-material/History";
@@ -939,7 +939,7 @@ const type=getItemFromLocalStorage("selectedTab")
       if (format === "csv" || format === "excel") {
         await downloadBackendExport({
           module: "tasks",
-          pathSuffix: `/${userId}/${companyId}`,
+          pathSuffix: `/${normalizeExportId(userId)}/${normalizeExportId(companyId)}`,
           params: {
             type: selectedSwitch || "me",
             search: search || "",
@@ -966,7 +966,7 @@ const type=getItemFromLocalStorage("selectedTab")
     } catch (err) {
       console.error("Task export error:", err);
       Toast({
-        message: err.response?.data?.message || "Failed to export tasks",
+        message: err.message || err.response?.data?.message || "Failed to export tasks",
         type: "error",
       });
     }

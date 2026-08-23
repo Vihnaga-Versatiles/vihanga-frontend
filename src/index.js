@@ -19,6 +19,9 @@ import "./theme/app-bg.css";
 import "./theme/notifications.css";
 import "./theme/accessibility.css";
 import { getCompanyConfig } from "action/CompanyAct";
+import { setupChunkLoadRecovery } from "utilities/cacheRefresh";
+
+setupChunkLoadRecovery();
 
 const ClearCacheComponent = withClearCache(MainApp);
 const queryClient = new QueryClient();
@@ -73,4 +76,10 @@ ReactDOM.render(
   document.getElementById("root"),
 );
 
-serviceWorker.register();
+serviceWorker.register({
+  onUpdate: (registration) => {
+    if (registration.waiting) {
+      registration.waiting.postMessage({ type: "SKIP_WAITING" });
+    }
+  },
+});

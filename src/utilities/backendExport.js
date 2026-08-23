@@ -23,6 +23,28 @@ const formatToExtension = (format) => {
   return "csv";
 };
 
+export const normalizeExportId = (value) => {
+  if (value == null) return "";
+  if (typeof value === "object") {
+    return String(value._id || value.id || value.companyId || "").trim();
+  }
+  return String(value).replace(/^"|"$/g, "").trim();
+};
+
+export const sanitizeExportParams = (params = {}) => {
+  const cleaned = { ...params };
+  if (cleaned.companyId != null) cleaned.companyId = normalizeExportId(cleaned.companyId);
+  if (cleaned.currentUserId != null) cleaned.currentUserId = normalizeExportId(cleaned.currentUserId);
+  if (cleaned.userId != null) cleaned.userId = normalizeExportId(cleaned.userId);
+  if (cleaned.empId != null) cleaned.empId = normalizeExportId(cleaned.empId);
+  Object.keys(cleaned).forEach((key) => {
+    if (cleaned[key] === undefined || cleaned[key] === null || cleaned[key] === "") {
+      delete cleaned[key];
+    }
+  });
+  return cleaned;
+};
+
 /**
  * Download export file from backend export API.
  * @param {object} options
@@ -32,6 +54,16 @@ const formatToExtension = (format) => {
  * @param {string} [options.pathSuffix] - e.g. `/userId/companyId` for tasks
  * @param {string} [options.filename] - download filename without extension
  */
+const parseBlobError = async (blob) => {
+  try {
+    const text = await blob.text();
+    const json = JSON.parse(text);
+    return json?.message || text;
+  } catch {
+    return "Export failed";
+  }
+};
+
 export const downloadBackendExport = async ({
   module,
   params = {},
@@ -43,22 +75,36 @@ export const downloadBackendExport = async ({
   const apiFormat = ext === "xlsx" ? "xlsx" : "csv";
   const url = `${appURL}/exports/${module}${pathSuffix}`;
 
-  const response = await axios.get(url, {
-    params: { ...params, format: apiFormat },
-    responseType: "blob",
-    headers: getAuthHeaders(),
-  });
+  try {
+    const response = await axios.get(url, {
+      params: sanitizeExportParams({ ...params, format: apiFormat }),
+      responseType: "blob",
+      headers: getAuthHeaders(),
+    });
 
-  const blob = new Blob([response.data], {
-    type:
-      ext === "xlsx"
-        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        : "text/csv;charset=utf-8;",
-  });
+    const contentType = response.headers["content-type"] || "";
+    if (contentType.includes("application/json")) {
+      const message = await parseBlobError(response.data);
+      throw new Error(message);
+    }
 
-  const defaultName = `${module}-export-${new Date().toISOString().slice(0, 10)}.${ext}`;
-  saveAs(blob, filename ? `${filename}.${ext}` : defaultName);
-  return response;
+    const blob = new Blob([response.data], {
+      type:
+        ext === "xlsx"
+          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          : "text/csv;charset=utf-8;",
+    });
+
+    const defaultName = `${module}-export-${new Date().toISOString().slice(0, 10)}.${ext}`;
+    saveAs(blob, filename ? `${filename}.${ext}` : defaultName);
+    return response;
+  } catch (err) {
+    if (err.response?.data instanceof Blob) {
+      const message = await parseBlobError(err.response.data);
+      throw new Error(message);
+    }
+    throw err;
+  }
 };
 
 export const buildLeaveExportParams = ({
@@ -74,14 +120,14 @@ export const buildLeaveExportParams = ({
   viewType,
   userRole,
 }) => {
-  const params = {
+  const params = sanitizeExportParams({
     companyId,
-    currentUserId,
+    currentUserId: normalizeExportId(currentUserId),
     type: type || "me",
     search: search || undefined,
     startDate,
     endDate,
-  };
+  });
 
   if (status && status !== "all") {
     params.status = status;
@@ -101,23 +147,25 @@ export const buildLeaveExportParams = ({
   }
 
   if (effectiveViewMode === "employee") {
-    params.empId = empId || currentUserId;
+    params.empId = normalizeExportId(empId || currentUserId);
   } else if (effectiveViewMode === "manager") {
     params.viewType = viewType || "pending-approvals";
+    params.type = type || "myteam";
   } else if (effectiveViewMode === "admin") {
     params.viewType = viewType || "all-leaves";
+    params.type = "mycompany";
   }
 
-  return params;
+  return sanitizeExportParams(params);
 };
 
 export const getExportUserContext = () => {
   const user = getItemFromLocalStorage("user");
-  const companyId = getItemFromLocalStorage("companyId");
+  const companyId = normalizeExportId(getItemFromLocalStorage("companyId"));
   return {
     user,
     companyId,
-    currentUserId: user?._id,
+    currentUserId: normalizeExportId(user?._id),
     userRole: user?.employmentInformation?.role,
   };
 };

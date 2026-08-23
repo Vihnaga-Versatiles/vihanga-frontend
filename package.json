@@ -2,7 +2,7 @@
   "name": "vihanga-frontend",
   "version": "0.1.0",
   "private": true,
-  "buildDate": 1784636995269,
+  "buildDate": 1787459229969,
   "dependencies": {
     "@azure/msal-browser": "^3.28.1",
     "@ckeditor/ckeditor5-build-classic": "^34.0.0",

@@ -47,6 +47,7 @@ import { canEdit, canDelete } from "utilities/privilegeHelper";
 import {
   downloadBackendExport,
   buildLeaveExportParams,
+  normalizeExportId,
 } from "utilities/backendExport";
 import { exportToPDF } from "utilities/ExportFunctions";
 
@@ -639,8 +640,8 @@ const companyId = getItemFromLocalStorage("companyId");
 
     const userRole = userRoleId?.employmentInformation?.role;
     return buildLeaveExportParams({
-      companyId,
-      currentUserId,
+      companyId: normalizeExportId(companyId),
+      currentUserId: normalizeExportId(currentUserId),
       type: getSelectedTabType(),
       search,
       startDate: actualStartDate,
@@ -708,7 +709,7 @@ const companyId = getItemFromLocalStorage("companyId");
     } catch (err) {
       console.error("Export error:", err);
       Toast({
-        message: err.response?.data?.message || "Failed to export leave records. Please try again.",
+        message: err.message || err.response?.data?.message || "Failed to export leave records. Please try again.",
         type: "error",
       });
     } finally {

@@ -20,7 +20,7 @@ import ErrorIcon from "@mui/icons-material/Error";
 import DateFilterButton from "pages/vihanga/pages/board/components/Date";
 import FilePreview from "pages/vihanga/pages/employeePortal/TimeTracking/AttendanceUpload/FilePreview";
 import { canEdit, canDelete } from "utilities/privilegeHelper";
-import { downloadBackendExport, buildLeaveExportParams } from "utilities/backendExport";
+import { downloadBackendExport, buildLeaveExportParams, normalizeExportId } from "utilities/backendExport";
 
 const UploadLeaves = () => {
   const { t } = useTranslation();
@@ -373,9 +373,9 @@ const UploadLeaves = () => {
     setExporting(true);
     try {
       const exportParams = buildLeaveExportParams({
-        companyId,
-        currentUserId,
-        type: getSelectedTabType() || "mycompany",
+        companyId: normalizeExportId(companyId),
+        currentUserId: normalizeExportId(currentUserId),
+        type: "mycompany",
         viewMode: "admin",
         viewType: "all-leaves",
         startDate: exportStartDate || undefined,
@@ -397,7 +397,7 @@ const UploadLeaves = () => {
     } catch (err) {
       console.error("Export error:", err);
       Toast({
-        message: err.response?.data?.message || "Failed to export leave records. Please try again.",
+        message: err.message || err.response?.data?.message || "Failed to export leave records. Please try again.",
         type: "error",
       });
     } finally {
