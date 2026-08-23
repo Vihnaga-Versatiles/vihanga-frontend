@@ -76,7 +76,7 @@ export let getServiceUrl = (baseURL) => {
 
   
 
-  switch ('') {
+  switch ('production') {
     case "production":
       finalURL = "https://hr.vihanga.io/api/";
       break;
