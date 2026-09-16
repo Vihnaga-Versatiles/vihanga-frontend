@@ -1097,7 +1097,6 @@ const [canEditDueDate, setCanEditDueDate] = useState(false);
                 placeholder={t("Tasks.commentHere")}
                 multiline={true}
                 minRows={3}
-                disabled={isEdit}
                 fullWidth
               />
             </Grid>
