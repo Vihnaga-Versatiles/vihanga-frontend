@@ -68,6 +68,8 @@ const ApplyforLeave = () => {
   const [othersDialogItems, setOthersDialogItems] = useState([]);
   const [othersDialogHeader, setOthersDialogHeader] = useState("");
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [formData, setFormData] = useState({
     absenceType: "",
     from: "",
@@ -81,12 +83,37 @@ const ApplyforLeave = () => {
   const {t} = useTranslation()
   const user = getItemFromLocalStorage("user");
 
-  const openPdfViewer = () => {
+  const openPdfViewer = async () => {
     setPdfViewerOpen(true);
+    setPdfLoading(true);
+    try {
+      const response = await axios.get(`${appURL}/recruitment/leave-policy`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const objectUrl = URL.createObjectURL(blob);
+      setPdfUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return objectUrl;
+      });
+    } catch (err) {
+      console.error("Leave Policy load error:", err);
+      Toast({
+        message: err.response?.data?.message || "Failed to load Leave Policy",
+        type: "error",
+      });
+      setPdfViewerOpen(false);
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
   const closePdfViewer = () => {
     setPdfViewerOpen(false);
+    setPdfUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
   };
 
   const fetchLeaveTypes = async () => {
@@ -1025,20 +1052,27 @@ const companyId = getItemFromLocalStorage("companyId");
           sx={{ 
             padding: 0, 
             height: isMobile ? 'calc(95vh - 64px)' : '70vh',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          <iframe
-            src="https://talent-spotify-templates.s3.ap-southeast-1.amazonaws.com/LEAVE+POLICY-+2026.pdf#toolbar=0&navpanes=0&scrollbar=0"
-            width="100%"
-            height="100%"
-            style={{
-              border: 'none',
-              display: 'block'
-            }}
-            title="Leave Policy"
-            onContextMenu={(e) => e.preventDefault()} // Disable right-click
-          />
+          {pdfLoading || !pdfUrl ? (
+            <CircularProgress sx={{ color: '#837E3B' }} />
+          ) : (
+            <iframe
+              src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+              width="100%"
+              height="100%"
+              style={{
+                border: 'none',
+                display: 'block'
+              }}
+              title="Leave Policy"
+              onContextMenu={(e) => e.preventDefault()}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
