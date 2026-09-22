@@ -24,7 +24,7 @@ import { getTemplateById } from "action/TemplatesAct";
 import { Toast } from "service/toast";
 import { tableGeneratorObjective } from "./ObjectivesTable/transformTable";
 import { tableGenerator } from "pages/Rewards";
-import { Box, Card, Typography, useMediaQuery, useTheme } from "@mui/material";
+import { Box, Card, Chip, LinearProgress, Typography, useMediaQuery, useTheme } from "@mui/material";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { InputTextComponent } from "pages/vihanga/components/input-elements/text";
 import FileUploadCustom from "pages/vihanga/components/filesUplode/draganddropFile";
@@ -50,6 +50,8 @@ export default function ReviewsForm() {
   const [, handleOverRating] = useState(0);
   const [orderModalShow3, setOrderModalShow3] = useState(false);
   const [orderModalShow5, setOrderModalShow5] = useState(false);
+  const [sectionGoalsRating, setSectionGoalsRating] = useState(0);
+  const [sectionCompetenciesRating, setSectionCompetenciesRating] = useState(0);
   const queryClient = useQueryClient();
   const [formsData, setFormsData] = useState([
     { competencyName: "", Feedback: "", Comments: "", type: "employee" },
@@ -1267,6 +1269,128 @@ export default function ReviewsForm() {
         </div>
           </div>
           </Box>
+
+        {/* Section Overall Ratings */}
+        <Box backgroundColor="#FFFFFF" borderRadius="20px" padding="24px" boxShadow="0px 0.1px 0px rgba(0,0,0,0.2)" mb={4}>
+          <Typography variant="h6" fontWeight={600} mb={3} fontFamily="Montserrat">
+            Section Overall Ratings
+          </Typography>
+          <Box display="flex" gap={3} flexWrap="wrap">
+            {/* Goals / Objectives Card */}
+            <Box
+              sx={{
+                flex: 1,
+                minWidth: 200,
+                border: "1px solid #e0e0e0",
+                borderRadius: "12px",
+                padding: "16px",
+                backgroundColor: "#FAFAFA",
+              }}
+            >
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
+                <Typography fontWeight={600} fontSize={14} fontFamily="Work Sans">
+                  Goals / Objectives
+                </Typography>
+                <Chip
+                  label="Manual"
+                  size="small"
+                  variant="outlined"
+                  sx={{
+                    borderColor: "#837F39",
+                    color: "#837F39",
+                    fontFamily: "Work Sans",
+                    fontSize: 11,
+                    height: 22,
+                  }}
+                />
+              </Box>
+              <Typography fontSize={12} color="text.secondary" fontFamily="Work Sans" mb={1}>
+                Calculated: {reviewForm.goals.length > 0
+                  ? (reviewForm.goals.reduce((sum, g) => sum + (Number(g.employeeRating) || 0), 0) / reviewForm.goals.length).toFixed(2)
+                  : "0.00"} / {reviewForm.ratings?.[0]?.value?.length || 5}
+              </Typography>
+              <RatingComponent
+                value={sectionGoalsRating}
+                readonly={false}
+                onChange={(e) => setSectionGoalsRating(Number(e.target.value))}
+                ratingScale={reviewForm.ratings}
+              />
+              <Typography fontSize={12} color="text.secondary" fontFamily="Work Sans" mt={0.5} mb={1}>
+                {sectionGoalsRating.toFixed(2)} / {reviewForm.ratings?.[0]?.value?.length || 5}
+              </Typography>
+              <LinearProgress
+                variant="determinate"
+                value={(sectionGoalsRating / (reviewForm.ratings?.[0]?.value?.length || 5)) * 100}
+                sx={{
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: "#e0e0e0",
+                  "& .MuiLinearProgress-bar": {
+                    backgroundColor: "#4CAF50",
+                    borderRadius: 4,
+                  },
+                }}
+              />
+            </Box>
+
+            {/* Competencies Card */}
+            <Box
+              sx={{
+                flex: 1,
+                minWidth: 200,
+                border: "1px solid #e0e0e0",
+                borderRadius: "12px",
+                padding: "16px",
+                backgroundColor: "#FAFAFA",
+              }}
+            >
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
+                <Typography fontWeight={600} fontSize={14} fontFamily="Work Sans">
+                  Competencies
+                </Typography>
+                <Chip
+                  label="Manual"
+                  size="small"
+                  variant="outlined"
+                  sx={{
+                    borderColor: "#837F39",
+                    color: "#837F39",
+                    fontFamily: "Work Sans",
+                    fontSize: 11,
+                    height: 22,
+                  }}
+                />
+              </Box>
+              <Typography fontSize={12} color="text.secondary" fontFamily="Work Sans" mb={1}>
+                Calculated: {formsData.length > 0 && formsData[0]?.competencyName
+                  ? (formsData.reduce((sum, c) => sum + (Number(c.Feedback) || 0), 0) / formsData.length).toFixed(2)
+                  : "0.00"} / {reviewForm.ratings?.[0]?.value?.length || 5}
+              </Typography>
+              <RatingComponent
+                value={sectionCompetenciesRating}
+                readonly={false}
+                onChange={(e) => setSectionCompetenciesRating(Number(e.target.value))}
+                ratingScale={reviewForm.ratings}
+              />
+              <Typography fontSize={12} color="text.secondary" fontFamily="Work Sans" mt={0.5} mb={1}>
+                {sectionCompetenciesRating.toFixed(2)} / {reviewForm.ratings?.[0]?.value?.length || 5}
+              </Typography>
+              <LinearProgress
+                variant="determinate"
+                value={(sectionCompetenciesRating / (reviewForm.ratings?.[0]?.value?.length || 5)) * 100}
+                sx={{
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: "#e0e0e0",
+                  "& .MuiLinearProgress-bar": {
+                    backgroundColor: "#4CAF50",
+                    borderRadius: 4,
+                  },
+                }}
+              />
+            </Box>
+          </Box>
+        </Box>
 
 <Box  backgroundColor="#FFFFFF"  borderRadius="20px" padding="24px" boxShadow="0px 0.1px 0px rgba(0,0,0,0.2)" mb={4} sx={{paddingBottom: "4rem"}}>
           <Box display="flex" gap={4} flexWrap="wrap" justifyContent="space-between">
