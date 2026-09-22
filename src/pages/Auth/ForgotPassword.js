@@ -20,6 +20,7 @@ export default function ForgotPassword() {
       let response = dispatch(
         forgotpassword({
           email: username,
+          clientUrl: window.location.origin,
         })
       );
       response
